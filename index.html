@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f14">
+<title>SkiSense</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <img src="icons/icon-192.png" alt="" width="36" height="36">
+    <div><b>SkiSense</b><span>Twój asystent na stoku</span></div>
+  </div>
+  <div id="status-pill" class="pill" data-state="off"><i></i><span>Rozłączono</span></div>
+</header>
+
+<main>
+  <!-- ========== TRENING ========== -->
+  <section id="view-train" class="view active" aria-label="Trening">
+    <div class="card">
+      <div class="row">
+        <div class="grow">
+          <div class="muted small">SkiTracker · czujnik IMU</div>
+          <div id="conn-status" class="status" data-state="stopped">● Rozłączono</div>
+          <div id="conn-detail" class="muted tiny">Wybierz źródło danych i połącz.</div>
+        </div>
+      </div>
+      <div class="row gap">
+        <select id="source" aria-label="Źródło danych">
+          <option value="sim">Demo (bez sprzętu)</option>
+          <option value="ble">ESP32 przez Bluetooth</option>
+        </select>
+        <button id="btn-connect" class="btn secondary">Połącz</button>
+      </div>
+      <p id="ble-warning" class="warn" hidden>Ta przeglądarka nie obsługuje Web Bluetooth. Otwórz stronę w Chrome na telefonie z Androidem (przez https).</p>
+    </div>
+
+    <div id="sim-card" class="card">
+      <div class="cap">Demo — styl jazdy</div>
+      <div class="row gap center"><span class="ok small">Gładko</span>
+        <input id="roughness" type="range" min="0" max="100" value="15" class="grow" aria-label="Szarpanie">
+        <span class="bad small">Szarpane</span></div>
+    </div>
+
+    <div id="cal-card" class="card">
+      <div class="row gap center">
+        <div id="cal-label" class="muted small grow"></div>
+        <button id="btn-axes" class="btn secondary compact">Osie…</button>
+        <button id="btn-calib" class="btn secondary compact" disabled>Kalibruj (postój)</button>
+      </div>
+    </div>
+
+    <div class="card timer-card">
+      <div id="timer" class="timer">00:00</div>
+      <div class="cap center">Czas treningu</div>
+    </div>
+
+    <button id="btn-record" class="btn primary" disabled>Rozpocznij trening</button>
+
+    <div class="card chart-card"><canvas id="live-canvas" aria-label="Wykres na żywo"></canvas></div>
+  </section>
+
+  <!-- ========== HISTORIA ========== -->
+  <section id="view-history" class="view" aria-label="Historia">
+    <h1>Historia</h1>
+    <div class="tiles three">
+      <div class="tile"><div class="cap">Przejazdy</div><div id="st-count" class="val">0</div></div>
+      <div class="tile"><div class="cap">Skręty</div><div id="st-turns" class="val">0</div></div>
+      <div class="tile"><div class="cap">Śr. SSI</div><div id="st-ssi" class="val">0</div></div>
+    </div>
+    <div id="history-list" class="list"></div>
+    <p id="history-empty" class="muted center">Brak zapisanych zjazdów. Nagraj pierwszy w zakładce Trening.</p>
+    <p id="storage-warning" class="warn" hidden>Pamięć przeglądarki jest niedostępna (tryb prywatny?). Zjazdy znikną po zamknięciu strony. Wyeksportuj je do CSV.</p>
+  </section>
+
+  <!-- ========== WYNIKI ========== -->
+  <section id="view-results" class="view" aria-label="Wyniki">
+    <p id="res-empty" class="muted center">Wybierz zjazd w zakładce Historia.</p>
+    <div id="res-body" hidden>
+      <div class="row center">
+        <h1 id="res-title" class="grow">Zjazd</h1>
+        <button id="btn-note" class="btn secondary compact">Notatka</button>
+      </div>
+      <div id="res-sub" class="muted small"></div>
+      <div id="res-notes" class="note" hidden></div>
+
+      <div class="card hero">
+        <div class="ring-wrap">
+          <svg viewBox="0 0 100 100" width="104" height="104" aria-hidden="true">
+            <circle cx="50" cy="50" r="44" class="ring-bg"/>
+            <circle id="ring" cx="50" cy="50" r="44" class="ring" transform="rotate(-90 50 50)"/>
+          </svg>
+          <div class="ring-text"><b id="ssi-value">0</b><span>SSI</span></div>
+        </div>
+        <div class="grow">
+          <div class="cap">SkiSense Index</div>
+          <div id="style-label" class="style">—</div>
+          <div class="muted small">Przeciętny rekreacyjny narciarz: ok. 100 pkt</div>
+        </div>
+      </div>
+
+      <div class="card"><div class="cap">Rozbicie na kategorie</div><div id="bars"></div></div>
+      <div id="tiles" class="tiles two"></div>
+
+      <div class="card chart-card"><canvas id="sess-canvas" aria-label="Wykres sesji"></canvas></div>
+      <p class="muted tiny center">Zielone tło = skręt w prawo, pomarańczowe = w lewo.</p>
+
+      <details class="card">
+        <summary>Skręty (<span id="turn-count">0</span>)</summary>
+        <div class="table-wrap">
+          <table><thead><tr><th>#</th><th>Kier.</th><th>Start</th><th>Czas</th><th>Ocena</th></tr></thead><tbody id="turns-body"></tbody></table>
+        </div>
+      </details>
+
+      <div class="btn-grid">
+        <button id="btn-csv" class="btn secondary">Eksport CSV</button>
+        <button id="btn-csv-pl" class="btn secondary">CSV dla Excela (PL)</button>
+        <button id="btn-delete" class="btn danger wide">Usuń zjazd</button>
+      </div>
+      <p class="muted tiny center">Oceny i SkiSense Index są heurystyczne; służą do porównywania własnych zjazdów.</p>
+    </div>
+  </section>
+</main>
+
+<nav class="tabbar" aria-label="Główna nawigacja">
+  <button data-view="train" class="active">Trening</button>
+  <button data-view="history">Historia</button>
+  <button data-view="results">Wyniki</button>
+</nav>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<dialog id="dlg-note">
+  <form method="dialog">
+    <h2>Notatka do zjazdu</h2>
+    <p class="muted small">Warunki, sprzęt, odczucia. Puste pole usuwa notatkę.</p>
+    <textarea id="note-text" rows="5" maxlength="1000"></textarea>
+    <div class="row gap end"><button value="cancel" class="btn secondary compact">Anuluj</button><button id="note-ok" value="ok" class="btn primary compact">Zapisz</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-axes">
+  <form method="dialog">
+    <h2>Mapowanie osi czujnika</h2>
+    <p class="muted small">Wskaż, której osi czujnika użyć dla każdego kierunku. Zmiana unieważnia kalibrację.</p>
+    <div class="axes-grid" id="axes-grid"></div>
+    <p id="axes-error" class="bad small" hidden>Każda oś czujnika może być użyta tylko raz.</p>
+    <div class="row gap end"><button value="cancel" class="btn secondary compact">Anuluj</button><button id="axes-ok" value="ok" class="btn primary compact">Zapisz</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-confirm">
+  <form method="dialog">
+    <h2 id="confirm-title">Na pewno?</h2>
+    <p id="confirm-text" class="muted small"></p>
+    <div class="row gap end"><button value="cancel" class="btn secondary compact">Anuluj</button><button id="confirm-ok" value="ok" class="btn danger compact">Usuń</button></div>
+  </form>
+</dialog>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
